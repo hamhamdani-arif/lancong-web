@@ -547,7 +547,7 @@
         // The map panel may have been display:none until now (mobile tabs), and
         // Leaflet sizes its tiles based on the container's size at init time -
         // nudge it to recalculate now that it's actually visible.
-        if (btn.dataset.tab === "sim") setTimeout(() => map.invalidateSize(), 0);
+        if (btn.dataset.tab === "sim") setTimeout(() => { map.invalidateSize(); fitRoute(); }, 0);
       });
     });
 
@@ -670,7 +670,8 @@
       renderItinerary(data.waypoints || [], markers);
 
       const boundsSource = allRoutePoints.length ? allRoutePoints : (data.waypoints || []).map((w) => [w.lat, w.lng]);
-      if (boundsSource.length) map.fitBounds(L.latLngBounds(boundsSource), { padding: [40, 40] });
+      lastBounds = boundsSource.length ? L.latLngBounds(boundsSource) : null;
+      fitRoute();
 
       lastTrajectory = data.vehicle_trajectory || [];
       animateVehicle(lastTrajectory);
@@ -680,6 +681,23 @@
     // Itinerary card (list of stops per day, click to fly to a stop)
     // =========================================================
     let lastTrajectory = [];
+    let lastBounds = null;
+
+    // Fit the whole route while keeping it clear of the itinerary card
+    // (bottom-left on desktop, bottom strip on phones).
+    function fitRoute() {
+      if (!lastBounds) return;
+      const card = document.getElementById("itinerary");
+      const narrow = window.matchMedia("(max-width: 860px)").matches;
+      let opts = { padding: [40, 40] };
+      if (!card.hidden) {
+        opts = narrow
+          ? { paddingTopLeft: [30, 30], paddingBottomRight: [30, card.offsetHeight + 30] }
+          : { paddingTopLeft: [card.offsetWidth + 40, 40], paddingBottomRight: [40, 40] };
+      }
+      map.fitBounds(lastBounds, opts);
+    }
+    window.fitRoute = fitRoute;
 
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -714,6 +732,8 @@
     document.getElementById("replay-btn").addEventListener("click", () => {
       if (animationTimer) { clearInterval(animationTimer); animationTimer = null; }
       if (vehicleMarker) { map.removeLayer(vehicleMarker); vehicleMarker = null; }
+      map.closePopup();
+      fitRoute();
       animateVehicle(lastTrajectory);
     });
 
